@@ -22,7 +22,7 @@ on:
       new_max_cell_count:
         description: 'New max_cell_count value'
         required: true
-        type: string
+        type: number
       create_draft:
         description: 'Create draft PR'
         required: false
