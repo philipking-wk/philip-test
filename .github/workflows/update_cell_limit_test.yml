@@ -1,0 +1,48 @@
+name: "Update Account Cell Limit Test"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to update (wk-dev, staging, prod, etc.)'
+        required: true
+        type: choice
+        options:
+          - wk-dev
+          - staging
+          - sandbox
+          - prod
+          - apac
+          - eu
+          - local
+      account_id:
+        description: 'Account ID to update'
+        required: true
+        type: string
+      new_max_cell_count:
+        description: 'New max_cell_count value'
+        required: true
+        type: string
+      create_draft:
+        description: 'Create draft PR'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run a one-line script
+      run: echo Hello, world!
+    
+    - name: Run a multi-line script
+      run: |
+        echo "environment: ${{ github.event.inputs.environment }}"
+        echo "account_id: ${{ github.event.inputs.account_id }}"
+        echo "new_max_cell_count: ${{ github.event.inputs.new_max_cell_count }}"
+        echo "create_draft: ${{ github.event.inputs.create_draft }}"
+        ls -la
