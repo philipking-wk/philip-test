@@ -84,6 +84,27 @@ jobs:
             echo "  Environment: $ENVIRONMENT"
             echo "  Account ID: $ACCOUNT_ID"
             echo "  Cell Count: $CELL_COUNT"
+          else
+            echo "No Jira description provided, using manual inputs"
+            
+            # Validate that all manual inputs are provided
+            if [[ -z "$MANUAL_ENV" || -z "$MANUAL_ACCOUNT" || -z "$MANUAL_CELL_COUNT" ]]; then
+              echo "Error: Either provide jira_ticket_description or all manual inputs (environment, account_id, new_max_cell_count)"
+              exit 1
+            fi
+            
+            ENVIRONMENT="$MANUAL_ENV"
+            ACCOUNT_ID="$MANUAL_ACCOUNT"
+            CELL_COUNT="$MANUAL_CELL_COUNT"
+            echo "Using manual input values:"
+            echo "  Environment: $ENVIRONMENT"
+            echo "  Account ID: $ACCOUNT_ID"
+            echo "  Cell Count: $CELL_COUNT"
+          fi
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "new_max_cell_count=$CELL_COUNT" >> $GITHUB_OUTPUT
       
       - name: Run a multi-line script
         env:
