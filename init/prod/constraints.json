@@ -2,5 +2,18 @@
     "globalConstraints": {
         "max_cell_count": 75000000
     },
-    "accountConstraints": {}
+    "accountConstraints": {
+        "some id": {
+            "max_embedded_tables": 7000,
+            "max_link_count": 23
+        },
+        "some other id": {
+            "max_embedded_tables": 7000,
+            "max_link_count": 244
+        },
+        "idk": {
+            "max_embedded_tables": 7000,
+            "max_link_count": 2444
+        }
+    }
 }
