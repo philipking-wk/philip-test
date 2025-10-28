@@ -131,9 +131,10 @@ jobs:
           ENV: ${{ steps.parse-jira.outputs.environment }}
           ACCOUNT: ${{ steps.parse-jira.outputs.account_id }}
           CELL_COUNT: ${{ steps.parse-jira.outputs.new_max_cell_count }}
+          CREATE_DRAFT: ${{ inputs.create_draft }}
         run: |
-          echo "environment: ${{ github.event.inputs.environment }}"
-          echo "account_id: ${{ github.event.inputs.account_id }}"
-          echo "new_max_cell_count: ${{ github.event.inputs.new_max_cell_count }}"
-          echo "create_draft: ${{ github.event.inputs.create_draft }}"
+          echo "environment: $ENV"
+          echo "account_id: $ACCOUNT"
+          echo "new_max_cell_count: $CELL_COUNT"
+          echo "create_draft: $CREATE_DRAFT"
           ls -la
