@@ -21,6 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Setup Credentials
+        uses: Workiva/gha-setup-credentials@v2.0.9
+        with:
+          disable-npm-creds: true
+
+      - name: Setup Go Cache
+        uses: actions/setup-go@v5.4.0
+        with:
+          go-version-file: go.mod
+
       - name: Parse Jira Description
         id: parse-jira
         env:
