@@ -25,9 +25,7 @@ jobs:
         id: parse-jira
         env:
           JIRA_DESC: ${{ inputs.jira_ticket_description }}
-          MANUAL_ENV: ${{ inputs.environment }}
-          MANUAL_ACCOUNT: ${{ inputs.account_id }}
-          MANUAL_CELL_COUNT: ${{ inputs.new_max_cell_count }}
+
         run: |
           # Validate that either Jira description or all manual inputs are provided
             echo "Parsing Jira description..."
@@ -37,7 +35,11 @@ jobs:
             
             # Extract Workspace IDs (e.g., "Workspace ID: QWNjb3VudB8xMDAyNjAwMDQ, idk2, idk3")
             # Support comma-separated values
-            ACCOUNT_IDS_RAW=$(echo "$JIRA_DESC" | grep -i "Workspace ID:" | sed 's/.*Workspace ID:[[:space:]]*\(.*\)/\1/')
+            # Get the line containing "Workspace ID:" and extract everything after the colon
+            WORKSPACE_LINE=$(echo "$JIRA_DESC" | grep -i "Workspace ID:")
+            
+            # Extract everything after the colon, then stop at patterns like " Word:" (space + uppercase word + colon)
+            ACCOUNT_IDS_RAW=$(echo "$WORKSPACE_LINE" | sed 's/.*Workspace ID:[[:space:]]*//' | sed 's/[[:space:]][A-Z][A-Za-z]*:.*$//')
             
             # Convert comma-separated IDs to JSON array (trim spaces from each ID)
             ACCOUNT_IDS_JSON=$(echo "$ACCOUNT_IDS_RAW" | jq -R -s -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
