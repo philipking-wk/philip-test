@@ -83,6 +83,10 @@ jobs:
             echo "  Environment: $ENVIRONMENT"
             echo "  Account ID: $ACCOUNT_ID"
             echo "  Cell Count: $CELL_COUNT"
+
+            echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+            echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+            echo "new_max_cell_count=$CELL_COUNT" >> $GITHUB_OUTPUT
       
       - name: Run a multi-line script
         env:
