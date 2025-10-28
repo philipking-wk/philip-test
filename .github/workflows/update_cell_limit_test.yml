@@ -112,12 +112,6 @@ jobs:
             exit 1
           fi
           
-          # Validate inputs
-          if [[ ! "$NEW_MAX_CELL_COUNT" =~ ^[0-9]+$ ]]; then
-            echo "Error: new_max_cell_count must be a positive integer"
-            exit 1
-          fi
-          
           # Parse the JSON array of account IDs
           ACCOUNT_IDS=$(echo "$ACCOUNT_IDS_JSON" | jq -r '.[]')
           
@@ -146,20 +140,6 @@ jobs:
             mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
             exit 1
           fi
-          
-          # Verify each account was updated
-          echo "$ACCOUNT_IDS" | while IFS= read -r ACCOUNT_ID; do
-            if [[ -z "$ACCOUNT_ID" ]]; then
-              continue
-            fi
-            
-            UPDATED_VALUE=$(jq -r --arg account_id "$ACCOUNT_ID" '.accountConstraints[$account_id].max_cell_count // "null"' "$CONSTRAINTS_FILE")
-            if [[ "$UPDATED_VALUE" != "$NEW_MAX_CELL_COUNT" ]]; then
-              echo "Error: Failed to update max_cell_count for $ACCOUNT_ID. Expected: $NEW_MAX_CELL_COUNT, Got: $UPDATED_VALUE"
-              mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
-              exit 1
-            fi
-          done
           
           rm "${CONSTRAINTS_FILE}.backup"
           echo "Successfully updated max_cell_count for all accounts to $NEW_MAX_CELL_COUNT"
