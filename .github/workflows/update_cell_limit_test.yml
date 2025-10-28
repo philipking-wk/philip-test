@@ -35,8 +35,12 @@ jobs:
             # Extract Prod Environment (e.g., "Prod Environment: APAC")
             ENVIRONMENT=$(echo "$JIRA_DESC" | grep -i "Prod Environment:" | sed 's/.*Prod Environment:[[:space:]]*\([A-Za-z0-9._-]*\).*/\1/' | tr '[:upper:]' '[:lower:]')
             
-            # Extract Workspace ID (e.g., "Workspace ID: QWNjb3VudB8xMDAyNjAwMDQ")
-            ACCOUNT_ID=$(echo "$JIRA_DESC" | grep -i "Workspace ID:" | sed 's/.*Workspace ID:[[:space:]]*\([A-Za-z0-9._-]*\).*/\1/')
+            # Extract Workspace IDs (e.g., "Workspace ID: QWNjb3VudB8xMDAyNjAwMDQ, idk2, idk3")
+            # Support comma-separated values
+            ACCOUNT_IDS_RAW=$(echo "$JIRA_DESC" | grep -i "Workspace ID:" | sed 's/.*Workspace ID:[[:space:]]*\(.*\)/\1/')
+            
+            # Convert comma-separated IDs to JSON array (trim spaces from each ID)
+            ACCOUNT_IDS_JSON=$(echo "$ACCOUNT_IDS_RAW" | jq -R -s -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
             
             # Extract Approved cell limit (e.g., "Approved cell limit Evan Leung: 3.5million")
             CELL_LIMIT_TEXT=$(echo "$JIRA_DESC" | grep -i "Approved cell limit" | sed 's/.*Approved cell limit.*:[[:space:]]*\(.*\)/\1/')
@@ -81,22 +85,22 @@ jobs:
             
             echo "Parsed values from Jira:"
             echo "  Environment: $ENVIRONMENT"
-            echo "  Account ID: $ACCOUNT_ID"
+            echo "  Account IDs: $ACCOUNT_IDS_RAW"
             echo "  Cell Count: $CELL_COUNT"
 
             echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
-            echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+            echo "account_ids=$ACCOUNT_IDS_JSON" >> $GITHUB_OUTPUT
             echo "new_max_cell_count=$CELL_COUNT" >> $GITHUB_OUTPUT
       
       - name: Run a multi-line script
         env:
           ENV: ${{ steps.parse-jira.outputs.environment }}
-          ACCOUNT: ${{ steps.parse-jira.outputs.account_id }}
+          ACCOUNT: ${{ steps.parse-jira.outputs.account_ids }}
           CELL_COUNT: ${{ steps.parse-jira.outputs.new_max_cell_count }}
           CREATE_DRAFT: ${{ inputs.create_draft }}
         run: |
           echo "environment: $ENV"
-          echo "account_id: $ACCOUNT"
+          echo "account_ids: $ACCOUNT"
           echo "new_max_cell_count: $CELL_COUNT"
           echo "create_draft: $CREATE_DRAFT"
           ls -la
@@ -104,15 +108,14 @@ jobs:
       - name: Update Max Cell Count
         env:
           ENV: ${{ steps.parse-jira.outputs.environment }}
-          ACCOUNT: ${{ steps.parse-jira.outputs.account_id }}
+          ACCOUNT_IDS_JSON: ${{ steps.parse-jira.outputs.account_ids }}
           CELL_COUNT: ${{ steps.parse-jira.outputs.new_max_cell_count }}
         run: |
           ENVIRONMENT="$ENV"
-          ACCOUNT_ID="$ACCOUNT"
           NEW_MAX_CELL_COUNT="$CELL_COUNT"
           CONSTRAINTS_FILE="init/${ENVIRONMENT}/constraints.json"
           
-          echo "Updating max_cell_count for account ${ACCOUNT_ID} to ${NEW_MAX_CELL_COUNT} in environment ${ENVIRONMENT}"
+          echo "Updating max_cell_count for multiple accounts in environment ${ENVIRONMENT}"
           echo "Constraints file: $CONSTRAINTS_FILE"
           
           # Check if constraints file exists
@@ -127,15 +130,27 @@ jobs:
             exit 1
           fi
           
+          # Parse the JSON array of account IDs
+          ACCOUNT_IDS=$(echo "$ACCOUNT_IDS_JSON" | jq -r '.[]')
+          
           # Create a backup
           cp "$CONSTRAINTS_FILE" "${CONSTRAINTS_FILE}.backup"
           
-          # Update max_cell_count 
-          jq --arg account_id "$ACCOUNT_ID" --argjson new_count "$NEW_MAX_CELL_COUNT" '
-            .accountConstraints = (.accountConstraints // {}) |
-            .accountConstraints[$account_id] = (.accountConstraints[$account_id] // {}) |
-            .accountConstraints[$account_id].max_cell_count = $new_count
-          ' "$CONSTRAINTS_FILE" > "${CONSTRAINTS_FILE}.tmp" && mv "${CONSTRAINTS_FILE}.tmp" "$CONSTRAINTS_FILE"
+          # Process each account ID
+          echo "$ACCOUNT_IDS" | while IFS= read -r ACCOUNT_ID; do
+            if [[ -z "$ACCOUNT_ID" ]]; then
+              continue
+            fi
+            
+            echo "Updating max_cell_count for account ${ACCOUNT_ID} to ${NEW_MAX_CELL_COUNT}"
+            
+            # Update max_cell_count for this account
+            jq --arg account_id "$ACCOUNT_ID" --argjson new_count "$NEW_MAX_CELL_COUNT" '
+              .accountConstraints = (.accountConstraints // {}) |
+              .accountConstraints[$account_id] = (.accountConstraints[$account_id] // {}) |
+              .accountConstraints[$account_id].max_cell_count = $new_count
+            ' "$CONSTRAINTS_FILE" > "${CONSTRAINTS_FILE}.tmp" && mv "${CONSTRAINTS_FILE}.tmp" "$CONSTRAINTS_FILE"
+          done
           
           # Validate updated JSON
           if ! jq empty "$CONSTRAINTS_FILE" 2>/dev/null; then
@@ -144,14 +159,21 @@ jobs:
             exit 1
           fi
           
-          UPDATED_VALUE=$(jq -r --arg account_id "$ACCOUNT_ID" '.accountConstraints[$account_id].max_cell_count // "null"' "$CONSTRAINTS_FILE")
-          if [[ "$UPDATED_VALUE" != "$NEW_MAX_CELL_COUNT" ]]; then
-            echo "Error: Failed to update max_cell_count. Expected: $NEW_MAX_CELL_COUNT, Got: $UPDATED_VALUE"
-            mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
-            exit 1
-          fi
+          # Verify each account was updated
+          echo "$ACCOUNT_IDS" | while IFS= read -r ACCOUNT_ID; do
+            if [[ -z "$ACCOUNT_ID" ]]; then
+              continue
+            fi
+            
+            UPDATED_VALUE=$(jq -r --arg account_id "$ACCOUNT_ID" '.accountConstraints[$account_id].max_cell_count // "null"' "$CONSTRAINTS_FILE")
+            if [[ "$UPDATED_VALUE" != "$NEW_MAX_CELL_COUNT" ]]; then
+              echo "Error: Failed to update max_cell_count for $ACCOUNT_ID. Expected: $NEW_MAX_CELL_COUNT, Got: $UPDATED_VALUE"
+              mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
+              exit 1
+            fi
+          done
           
           rm "${CONSTRAINTS_FILE}.backup"
-          echo "Successfully updated max_cell_count for account $ACCOUNT_ID to $NEW_MAX_CELL_COUNT"
+          echo "Successfully updated max_cell_count for all accounts to $NEW_MAX_CELL_COUNT"
           echo "Changes made:"
           git diff "$CONSTRAINTS_FILE" || true
