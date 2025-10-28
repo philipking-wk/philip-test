@@ -100,3 +100,58 @@ jobs:
           echo "new_max_cell_count: $CELL_COUNT"
           echo "create_draft: $CREATE_DRAFT"
           ls -la
+
+      - name: Update Max Cell Count
+        env:
+          ENV: ${{ steps.parse-jira.outputs.environment }}
+          ACCOUNT: ${{ steps.parse-jira.outputs.account_id }}
+          CELL_COUNT: ${{ steps.parse-jira.outputs.new_max_cell_count }}
+        run: |
+          ENVIRONMENT="$ENV"
+          ACCOUNT_ID="$ACCOUNT"
+          NEW_MAX_CELL_COUNT="$CELL_COUNT"
+          CONSTRAINTS_FILE="init/${ENVIRONMENT}/constraints.json"
+          
+          echo "Updating max_cell_count for account ${ACCOUNT_ID} to ${NEW_MAX_CELL_COUNT} in environment ${ENVIRONMENT}"
+          echo "Constraints file: $CONSTRAINTS_FILE"
+          
+          # Check if constraints file exists
+          if [[ ! -f "$CONSTRAINTS_FILE" ]]; then
+            echo "Error: Constraints file $CONSTRAINTS_FILE does not exist"
+            exit 1
+          fi
+          
+          # Validate inputs
+          if [[ ! "$NEW_MAX_CELL_COUNT" =~ ^[0-9]+$ ]]; then
+            echo "Error: new_max_cell_count must be a positive integer"
+            exit 1
+          fi
+          
+          # Create a backup
+          cp "$CONSTRAINTS_FILE" "${CONSTRAINTS_FILE}.backup"
+          
+          # Update max_cell_count 
+          jq --arg account_id "$ACCOUNT_ID" --argjson new_count "$NEW_MAX_CELL_COUNT" '
+            .accountConstraints = (.accountConstraints // {}) |
+            .accountConstraints[$account_id] = (.accountConstraints[$account_id] // {}) |
+            .accountConstraints[$account_id].max_cell_count = $new_count
+          ' "$CONSTRAINTS_FILE" > "${CONSTRAINTS_FILE}.tmp" && mv "${CONSTRAINTS_FILE}.tmp" "$CONSTRAINTS_FILE"
+          
+          # Validate updated JSON
+          if ! jq empty "$CONSTRAINTS_FILE" 2>/dev/null; then
+            echo "Error: Generated invalid JSON, restoring backup"
+            mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
+            exit 1
+          fi
+          
+          UPDATED_VALUE=$(jq -r --arg account_id "$ACCOUNT_ID" '.accountConstraints[$account_id].max_cell_count // "null"' "$CONSTRAINTS_FILE")
+          if [[ "$UPDATED_VALUE" != "$NEW_MAX_CELL_COUNT" ]]; then
+            echo "Error: Failed to update max_cell_count. Expected: $NEW_MAX_CELL_COUNT, Got: $UPDATED_VALUE"
+            mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
+            exit 1
+          fi
+          
+          rm "${CONSTRAINTS_FILE}.backup"
+          echo "Successfully updated max_cell_count for account $ACCOUNT_ID to $NEW_MAX_CELL_COUNT"
+          echo "Changes made:"
+          git diff "$CONSTRAINTS_FILE" || true
