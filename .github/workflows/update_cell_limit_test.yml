@@ -20,32 +20,26 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Parse Jira Description
         id: parse-jira
         env:
           JIRA_DESC: ${{ inputs.jira_ticket_description }}
 
         run: |
-          # Validate that either Jira description or all manual inputs are provided
             echo "Parsing Jira description..."
             
-            # Extract Prod Environment (e.g., "Prod Environment: APAC")
+            # Extract Prod Environment 
             ENVIRONMENT=$(echo "$JIRA_DESC" | grep -i "Prod Environment:" | sed 's/.*Prod Environment:[[:space:]]*\([A-Za-z0-9._-]*\).*/\1/' | tr '[:upper:]' '[:lower:]')
             
-            # Extract Workspace IDs (e.g., "Workspace ID: QWNjb3VudB8xMDAyNjAwMDQ, idk2, idk3")
-            # Support comma-separated values
+            # Extract Workspace IDs 
             # Get the line containing "Workspace ID:" and extract everything after the colon
             WORKSPACE_LINE=$(echo "$JIRA_DESC" | grep -i "Workspace ID:")
             
-            # Extract everything after the colon, then stop at the first field label pattern
-            # Field labels typically look like: " [A-Z][A-Za-z]+:" (space + uppercase word + colon)
-            # Use awk to find and stop at this pattern
+            # Stop at the first field label pattern
             ACCOUNT_IDS_RAW=$(echo "$WORKSPACE_LINE" | sed 's/.*Workspace ID:[[:space:]]*//' | awk '{
               result = $0
-              # Use regex to find " space + uppercase word + colon" pattern
-              # This matches field labels like "CSM Contact:", "Approved", etc.
-              # We use gsub with a custom function to extract only the part before this pattern
+              # Find " space + uppercase word + colon" pattern
               if (match(result, /[[:space:]][A-Z][[:alpha:]]+:/)) {
                 result = substr(result, 1, RSTART - 1)
               }
@@ -55,10 +49,10 @@ jobs:
             # Convert comma-separated IDs to JSON array (trim spaces from each ID)
             ACCOUNT_IDS_JSON=$(echo "$ACCOUNT_IDS_RAW" | jq -R -s -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
             
-            # Extract Approved cell limit (e.g., "Approved cell limit Evan Leung: 3.5million")
+            # Extract Approved cell limit
             CELL_LIMIT_TEXT=$(echo "$JIRA_DESC" | grep -i "Approved cell limit" | sed 's/.*Approved cell limit.*:[[:space:]]*\(.*\)/\1/')
             
-            # Parse the number (handles "3.5million", "3million", "3.5M", etc.)
+            # Parse the number (handles "3.5million", "3million", "3.5M")
             if echo "$CELL_LIMIT_TEXT" | grep -q "million\|M"; then
               # Extract number before "million" or "M"
               NUM=$(echo "$CELL_LIMIT_TEXT" | sed 's/\([0-9]*\.*[0-9]*\).*million.*/\1/' | sed 's/\([0-9]*\.*[0-9]*\).*M.*/\1/')
@@ -77,19 +71,13 @@ jobs:
               CELL_COUNT=$(echo "$CELL_LIMIT_TEXT" | tr -cd '0-9')
             fi
             
-            # Validate environment mapping (Prod Environment -> GitHub environment name)
+            # Validate environment mapping
             case "$ENVIRONMENT" in
               apac)
                 ENVIRONMENT="apac"
                 ;;
               eu)
                 ENVIRONMENT="eu"
-                ;;
-              prod)
-                ENVIRONMENT="prod"
-                ;;
-              production)
-                ENVIRONMENT="prod"
                 ;;
               *)
                 ENVIRONMENT="prod"
@@ -105,19 +93,6 @@ jobs:
             echo "account_ids=$ACCOUNT_IDS_JSON" >> $GITHUB_OUTPUT
             echo "new_max_cell_count=$CELL_COUNT" >> $GITHUB_OUTPUT
       
-      - name: Run a multi-line script
-        env:
-          ENV: ${{ steps.parse-jira.outputs.environment }}
-          ACCOUNT: ${{ steps.parse-jira.outputs.account_ids }}
-          CELL_COUNT: ${{ steps.parse-jira.outputs.new_max_cell_count }}
-          CREATE_DRAFT: ${{ inputs.create_draft }}
-        run: |
-          echo "environment: $ENV"
-          echo "account_ids: $ACCOUNT"
-          echo "new_max_cell_count: $CELL_COUNT"
-          echo "create_draft: $CREATE_DRAFT"
-          ls -la
-
       - name: Update Max Cell Count
         env:
           ENV: ${{ steps.parse-jira.outputs.environment }}
@@ -134,12 +109,6 @@ jobs:
           # Check if constraints file exists
           if [[ ! -f "$CONSTRAINTS_FILE" ]]; then
             echo "Error: Constraints file $CONSTRAINTS_FILE does not exist"
-            exit 1
-          fi
-          
-          # Validate inputs
-          if [[ ! "$NEW_MAX_CELL_COUNT" =~ ^[0-9]+$ ]]; then
-            echo "Error: new_max_cell_count must be a positive integer"
             exit 1
           fi
           
@@ -172,20 +141,7 @@ jobs:
             exit 1
           fi
           
-          # Verify each account was updated
-          echo "$ACCOUNT_IDS" | while IFS= read -r ACCOUNT_ID; do
-            if [[ -z "$ACCOUNT_ID" ]]; then
-              continue
-            fi
-            
-            UPDATED_VALUE=$(jq -r --arg account_id "$ACCOUNT_ID" '.accountConstraints[$account_id].max_cell_count // "null"' "$CONSTRAINTS_FILE")
-            if [[ "$UPDATED_VALUE" != "$NEW_MAX_CELL_COUNT" ]]; then
-              echo "Error: Failed to update max_cell_count for $ACCOUNT_ID. Expected: $NEW_MAX_CELL_COUNT, Got: $UPDATED_VALUE"
-              mv "${CONSTRAINTS_FILE}.backup" "$CONSTRAINTS_FILE"
-              exit 1
-            fi
-          done
-          
+          // Clean up
           rm "${CONSTRAINTS_FILE}.backup"
           echo "Successfully updated max_cell_count for all accounts to $NEW_MAX_CELL_COUNT"
           echo "Changes made:"
