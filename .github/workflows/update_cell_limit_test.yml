@@ -34,15 +34,97 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Run a one-line script
-      run: echo Hello, world!
-    
-    - name: Run a multi-line script
-      run: |
-        echo "environment: ${{ github.event.inputs.environment }}"
-        echo "account_id: ${{ github.event.inputs.account_id }}"
-        echo "new_max_cell_count: ${{ github.event.inputs.new_max_cell_count }}"
-        echo "create_draft: ${{ github.event.inputs.create_draft }}"
-        ls -la
+      - uses: actions/checkout@v4
+      
+      - name: Parse Jira Description
+        id: parse-jira
+        env:
+          JIRA_DESC: ${{ inputs.jira_ticket_description }}
+          MANUAL_ENV: ${{ inputs.environment }}
+          MANUAL_ACCOUNT: ${{ inputs.account_id }}
+          MANUAL_CELL_COUNT: ${{ inputs.new_max_cell_count }}
+        run: |
+          # Validate that either Jira description or all manual inputs are provided
+          if [[ -n "$JIRA_DESC" && "$JIRA_DESC" != "" ]]; then
+            echo "Parsing Jira description..."
+            
+            # Extract Prod Environment (e.g., "Prod Environment: APAC")
+            ENVIRONMENT=$(echo "$JIRA_DESC" | grep -i "Prod Environment:" | sed 's/.*Prod Environment:[[:space:]]*\([A-Za-z0-9-_]*\).*/\1/' | tr '[:upper:]' '[:lower:]')
+            
+            # Extract Workspace ID (e.g., "Workspace ID: QWNjb3VudB8xMDAyNjAwMDQ")
+            ACCOUNT_ID=$(echo "$JIRA_DESC" | grep -i "Workspace ID:" | sed 's/.*Workspace ID:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/')
+            
+            # Extract Approved cell limit (e.g., "Approved cell limit Evan Leung: 3.5million")
+            CELL_LIMIT_TEXT=$(echo "$JIRA_DESC" | grep -i "Approved cell limit" | sed 's/.*Approved cell limit.*:[[:space:]]*\(.*\)/\1/')
+            
+            # Parse the number (handles "3.5million", "3million", "3.5M", etc.)
+            if echo "$CELL_LIMIT_TEXT" | grep -q "million\|M"; then
+              # Extract number before "million" or "M"
+              NUM=$(echo "$CELL_LIMIT_TEXT" | sed 's/\([0-9]*\.*[0-9]*\).*million.*/\1/' | sed 's/\([0-9]*\.*[0-9]*\).*M.*/\1/')
+              # Convert to millions (3.5 -> 3500000)
+              if echo "$NUM" | grep -q "\."; then
+                # Has decimal point
+                INT_PART=$(echo "$NUM" | sed 's/\([0-9]*\)\.[0-9]*/\1/')
+                DEC_PART=$(echo "$NUM" | sed 's/[0-9]*\.\([0-9]*\)/\1/')
+                CELL_COUNT="${INT_PART}${DEC_PART}000000"
+              else
+                # No decimal
+                CELL_COUNT="${NUM}000000"
+              fi
+            else
+              # No "million" suffix, assume it's already a number
+              CELL_COUNT=$(echo "$CELL_LIMIT_TEXT" | tr -cd '0-9')
+            fi
+            
+            # Validate environment mapping (Prod Environment -> GitHub environment name)
+            case "$ENVIRONMENT" in
+              apac)
+                ENVIRONMENT="apac"
+                ;;
+              eu)
+                ENVIRONMENT="eu"
+                ;;
+              prod)
+                ENVIRONMENT="prod"
+                ;;
+              production)
+                ENVIRONMENT="prod"
+                ;;
+              *)
+                ENVIRONMENT="prod"
+                ;;
+            esac
+            
+            echo "Parsed values from Jira:"
+            echo "  Environment: $ENVIRONMENT"
+            echo "  Account ID: $ACCOUNT_ID"
+            echo "  Cell Count: $CELL_COUNT"
+          else
+            echo "No Jira description provided, using manual inputs"
+            
+            # Validate that all manual inputs are provided
+            if [[ -z "$MANUAL_ENV" || -z "$MANUAL_ACCOUNT" || -z "$MANUAL_CELL_COUNT" ]]; then
+              echo "Error: Either provide jira_ticket_description or all manual inputs (environment, account_id, new_max_cell_count)"
+              exit 1
+            fi
+            
+            ENVIRONMENT="$MANUAL_ENV"
+            ACCOUNT_ID="$MANUAL_ACCOUNT"
+            CELL_COUNT="$MANUAL_CELL_COUNT"
+            echo "Using manual input values:"
+            echo "  Environment: $ENVIRONMENT"
+            echo "  Account ID: $ACCOUNT_ID"
+            echo "  Cell Count: $CELL_COUNT"
+          fi
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "new_max_cell_count=$CELL_COUNT" >> $GITHUB_OUTPUT
+      
+      - name: Run a multi-line script
+        run: |
+          echo "environment: ${{ github.event.inputs.environment }}"
+          echo "account_id: ${{ github.event.inputs.account_id }}"
+          echo "new_max_cell_count: ${{ github.event.inputs.new_max_cell_count }}"
+          echo "create_draft: ${{ github.event.inputs.create_draft }}"
+          ls -la
