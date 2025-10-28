@@ -54,10 +54,13 @@ jobs:
             echo "Parsing Jira description..."
             
             # Extract Prod Environment (e.g., "Prod Environment: APAC")
-            ENVIRONMENT=$(echo "$JIRA_DESC" | grep -i "Prod Environment:" | sed 's/.*Prod Environment:[[:space:]]*\([A-Za-z0-9-_]*\).*/\1/' | tr '[:upper:]' '[:lower:]')
+            ENVIRONMENT=$(echo "$JIRA_DESC" | grep -i "Prod Environment:" | sed 's/.*Prod Environment:[[:space:]]*\([A-Za-z0-9._-]*\).*/\1/' | tr '[:upper:]' '[:lower:]')
+            
+            echo "DEBUG: Extracted ENVIRONMENT value: '$ENVIRONMENT'"
+            echo "DEBUG: ENVIRONMENT length: ${#ENVIRONMENT}"
             
             # Extract Workspace ID (e.g., "Workspace ID: QWNjb3VudB8xMDAyNjAwMDQ")
-            ACCOUNT_ID=$(echo "$JIRA_DESC" | grep -i "Workspace ID:" | sed 's/.*Workspace ID:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/')
+            ACCOUNT_ID=$(echo "$JIRA_DESC" | grep -i "Workspace ID:" | sed 's/.*Workspace ID:[[:space:]]*\([A-Za-z0-9._-]*\).*/\1/')
             
             # Extract Approved cell limit (e.g., "Approved cell limit Evan Leung: 3.5million")
             CELL_LIMIT_TEXT=$(echo "$JIRA_DESC" | grep -i "Approved cell limit" | sed 's/.*Approved cell limit.*:[[:space:]]*\(.*\)/\1/')
@@ -99,6 +102,8 @@ jobs:
                 ENVIRONMENT="prod"
                 ;;
             esac
+            
+            echo "DEBUG: ENVIRONMENT after case statement: '$ENVIRONMENT'"
             
             echo "Parsed values from Jira:"
             echo "  Environment: $ENVIRONMENT"
