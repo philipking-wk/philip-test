@@ -38,8 +38,19 @@ jobs:
             # Get the line containing "Workspace ID:" and extract everything after the colon
             WORKSPACE_LINE=$(echo "$JIRA_DESC" | grep -i "Workspace ID:")
             
-            # Extract everything after the colon, then stop at patterns like " Word:" (space + uppercase word + colon)
-            ACCOUNT_IDS_RAW=$(echo "$WORKSPACE_LINE" | sed 's/.*Workspace ID:[[:space:]]*//' | sed 's/[[:space:]][A-Z][A-Za-z]*:.*$//')
+            # Extract everything after the colon, then stop at the first field label pattern
+            # Field labels typically look like: " [A-Z][A-Za-z]+:" (space + uppercase word + colon)
+            # Use awk to find and stop at this pattern
+            ACCOUNT_IDS_RAW=$(echo "$WORKSPACE_LINE" | sed 's/.*Workspace ID:[[:space:]]*//' | awk '{
+              result = $0
+              # Use regex to find " space + uppercase word + colon" pattern
+              # This matches field labels like "CSM Contact:", "Approved", etc.
+              # We use gsub with a custom function to extract only the part before this pattern
+              if (match(result, /[[:space:]][A-Z][[:alpha:]]+:/)) {
+                result = substr(result, 1, RSTART - 1)
+              }
+              print result
+            }')
             
             # Convert comma-separated IDs to JSON array (trim spaces from each ID)
             ACCOUNT_IDS_JSON=$(echo "$ACCOUNT_IDS_RAW" | jq -R -s -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
