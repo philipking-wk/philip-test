@@ -5,7 +5,7 @@ on:
     inputs:
       environment:
         description: 'Environment to update (wk-dev, staging, prod, etc.)'
-        required: true
+        required: false
         type: choice
         options:
           - wk-dev
@@ -17,17 +17,22 @@ on:
           - local
       account_id:
         description: 'Account ID to update'
-        required: true
+        required: false
         type: string
       new_max_cell_count:
         description: 'New max_cell_count value'
-        required: true
-        type: number
+        required: false
+        type: string
       create_draft:
         description: 'Create draft PR'
         required: false
         type: boolean
         default: false
+      jira_ticket_description:
+        description: 'Jira ticket description'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
