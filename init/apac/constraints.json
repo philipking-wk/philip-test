@@ -1,0 +1,6 @@
+{
+    "globalConstraints": {
+        "max_cell_count": 7500000
+    },
+    "accountConstraints": {}
+}
